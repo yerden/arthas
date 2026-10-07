@@ -143,6 +143,7 @@
   "voice.decryptFailed": "Voice decryption failed",
   "voice.unsupported": "This browser can't play this audio format",
   "voice.download": "Download instead",
+  "voice.save": "Save voice message",
   "voice.holdToRecord": "Hold to record",
 
   "language.switch": "Switch language",

@@ -380,6 +380,25 @@ export function VoiceMessage({ transferId, duration, senderName, isMine }: Voice
           </div>
         )}
       </div>
+
+      {/* 保存按钮 —— 与文件消息的下载入口对齐
+       * 语音此前只能播放，Blob 会被 LRU 淘汰，想留存就没有任何办法。
+       * 扩展名由实际 mimeType 推断，系统播放器才能正确打开。
+       */}
+      {blobUrl && (
+        <a
+          href={blobUrl}
+          download={`voice-${transferId}.${voiceFileExtension(mimeType)}`}
+          onClick={(e) => e.stopPropagation()}
+          className="w-8 h-8 flex items-center justify-center rounded-full flex-shrink-0
+                     bg-indigo-600/20 hover:bg-indigo-600/40 text-indigo-400
+                     transition-colors duration-150"
+          aria-label={t('voice.save')}
+          title={t('voice.save')}
+        >
+          <span className="text-sm" aria-hidden="true">⬇️</span>
+        </a>
+      )}
     </div>
   );
 }

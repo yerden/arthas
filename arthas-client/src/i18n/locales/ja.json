@@ -143,6 +143,7 @@
   "voice.decryptFailed": "音声の復号に失敗しました",
   "voice.unsupported": "このブラウザはこの音声形式を再生できません",
   "voice.download": "代わりにダウンロード",
+  "voice.save": "音声メッセージを保存",
   "voice.holdToRecord": "長押しで録音",
 
   "language.switch": "言語を切り替え",
