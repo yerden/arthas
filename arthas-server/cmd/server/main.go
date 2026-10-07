@@ -34,6 +34,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/arthas/arthas-server/internal/access"
 	"github.com/arthas/arthas-server/internal/dailytopic"
 	"github.com/arthas/arthas-server/internal/hub"
 	"github.com/arthas/arthas-server/internal/logger"
@@ -363,9 +364,23 @@ func main() {
 	// - 10 秒对正常客户端绰绰有余（即使在高延迟网络下）
 	// - 但会切断 slowloris 攻击者的慢速连接
 	// - 注意：这只保护 HTTP 层，WebSocket 连接升级后不受此限制
+	// ─── Optional instance passphrase gate ──────────────────────────────────
+	//
+	// Disabled unless ACCESS_PASSPHRASE is set, so public deployments and local
+	// development behave exactly as before. When enabled it wraps the whole mux,
+	// including /ws, and exempts /ping so platform health checks keep passing.
+	//
+	// This is access control, not encryption: it decides who may reach the
+	// server at all. Message confidentiality is unchanged — the relay still
+	// cannot decrypt anything either way.
+	accessGate := access.New(os.Getenv("ACCESS_PASSPHRASE"), 0)
+	if accessGate.Enabled() {
+		logger.Info("Access", "passphrase gate enabled")
+	}
+
 	srv := &http.Server{
 		Addr:              ":" + port,
-		Handler:           mux,
+		Handler:           accessGate.Middleware(mux),
 		ReadHeaderTimeout: 10 * time.Second,
 	}
 
