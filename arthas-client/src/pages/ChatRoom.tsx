@@ -47,7 +47,7 @@ export function ChatRoom() {
   }, []);
 
   return (
-    <div className="flex flex-col h-screen supports-[height:100dvh]:h-[100dvh] bg-gray-900 text-white">
+    <div className="flex flex-col h-[var(--app-height)] bg-gray-900 text-white">
       {/* Connection Status Banner */}
       <ConnectionBanner />
 

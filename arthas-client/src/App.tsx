@@ -3,6 +3,7 @@ import { useChatStore } from './stores/chatStore';
 import { usePageStore } from './stores/pageStore';
 import { useMatchStore } from './match/matchStore';
 import { disconnect, onReconnect } from './network/websocket';
+import { useAppHeight } from './hooks/useAppHeight';
 import { Home } from './pages/Home';
 import { ChatRoom } from './pages/ChatRoom';
 import { Hub } from './pages/Hub';
@@ -81,6 +82,9 @@ function App() {
   const [matchToken, setMatchToken] = useState<string | null>(() =>
     parseMatchInviteRoute(window.location.hash)
   );
+
+  // 让应用外壳跟随可视视口，避免 iOS 键盘收起后下半屏留白。
+  useAppHeight();
 
   useEffect(() => {
     const handleHashChange = () => {

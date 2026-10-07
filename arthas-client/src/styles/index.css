@@ -6,6 +6,17 @@
   box-sizing: border-box;
 }
 
+:root {
+  /* 默认值；useAppHeight 会用可视视口的实际高度覆盖它。 */
+  --app-height: 100vh;
+}
+
+@supports (height: 100dvh) {
+  :root {
+    --app-height: 100dvh;
+  }
+}
+
 body {
   margin: 0;
   padding: 0;
@@ -15,7 +26,7 @@ body {
      became unreachable by touch. ChatRoom does not rely on this rule: it is a
      fixed-height shell (h-screen/100dvh) with its own inner scroll container. */
   overflow-x: hidden;
-  background: #0d0d1a;
+  background: #111827;
   font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
 }
 
@@ -28,7 +39,7 @@ body {
   width: 4px;
 }
 ::-webkit-scrollbar-track {
-  background: #0d0d1a;
+  background: #111827;
 }
 ::-webkit-scrollbar-thumb {
   background: #333355;
