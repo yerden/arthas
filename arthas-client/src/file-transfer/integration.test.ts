@@ -738,7 +738,7 @@ describe('集成测试: 消息路由（handleFileMessage）', () => {
     expect(activeReceiveCount).toBe(0);
   });
 
-  it('MSG_RELAY_FILE_COMPLETE 在 chunk 不完整时标记为 failed', () => {
+  it('MSG_RELAY_FILE_COMPLETE waits instead of failing when chunks are missing', () => {
     // 设置一个 receiving 状态的传输（只收到 2/5 个 chunk）
     const transfers = new Map<string, TransferState>();
     transfers.set('incomplete-test', createReceivingTransfer({
@@ -764,11 +764,14 @@ describe('集成测试: 消息路由（handleFileMessage）', () => {
 
     useFileTransferStore.getState().handleFileMessage(completeMsg);
 
-    // 验证状态变为 failed（chunk 不完整）
+    // COMPLETE 先于 chunk 处理完成到达是正常现象：chunk 的处理链路是异步的
+    // （await decryptChunk），而 COMPLETE 紧随最后一个 chunk 到达并同步跑完。
+    // 因此这里不能判定失败 —— 只记录「发送方已声明发完」，等最后一个 chunk
+    // 落盘时再收尾。真正丢失的 chunk 由 60s 超时负责判定失败。
     const { transfers: after } = useFileTransferStore.getState();
-    const failedTransfer = after.get('incomplete-test')!;
-    expect(failedTransfer.status).toBe('failed');
-    expect(failedTransfer.error).toContain('不完整');
+    const pending = after.get('incomplete-test')!;
+    expect(pending.status).toBe('receiving');
+    expect(pending.completionSignaled).toBe(true);
   });
 
   it('MSG_RELAY_FILE_ACK 对不存在的 transferId 不抛出异常', () => {

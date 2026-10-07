@@ -138,7 +138,9 @@ describe('Property: Chunk split/reassemble round-trip', () => {
 
     expect(reassembledBuffer.length).toBe(size);
     expect(reassembledBuffer).toEqual(buffer);
-  }, 30_000); // 30s timeout for large file test
+  // 切 5MB 需要 80 次异步 Blob 读取；happy-dom 的 Blob 是纯 JS 实现，
+  // 实测约 31s，刚好越过原来的 30s 上限。
+  }, 120_000);
 
   it('handles boundary value: exactly 1 byte (minimum file size)', async () => {
     const buffer = new Uint8Array([42]);
