@@ -176,8 +176,13 @@ export function DropZone({ children }: DropZoneProps) {
   // 在触摸设备上，drag-and-drop API 不可用（或行为不一致）。
   // 直接跳过事件监听，避免不必要的性能开销和潜在的交互冲突。
   // 触摸设备用户通过 FileAttachButton 选择文件。
+  // NOTE: the wrapper div must be kept even on touch devices. The parent
+  // (ChatRoom's `flex flex-1 overflow-hidden`) is a flex ROW, so without this
+  // `flex-col` container the message list, typing indicator and input get laid
+  // out side by side instead of stacked -- the input lands to the right of the
+  // messages. Only the drag handlers are skipped here, which is the point.
   if (isTouchDevice) {
-    return <>{children}</>;
+    return <div className="relative flex-1 flex flex-col overflow-hidden">{children}</div>;
   }
 
   return (
