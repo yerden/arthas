@@ -26,6 +26,15 @@ export function useAppHeight(): void {
     const viewport = window.visualViewport;
 
     const apply = (): void => {
+      // 📚 学习要点: 双指缩放同样会改变 visualViewport.height
+      // visualViewport 描述的是「当前看得见的区域」，不是布局高度。用户放大
+      // 到 2 倍时，可见区域只剩一半，height 也随之减半 —— 但布局并没有变矮。
+      // 如果这时跟着缩小外壳，界面会被压成半屏，下面露出一大片空白，正是
+      // 「界面错乱」的成因。缩放期间不碰布局，等回到 1:1 再同步。
+      if (viewport && Math.abs(viewport.scale - 1) > 0.01) {
+        return;
+      }
+
       // visualViewport 不可用时退回 innerHeight —— 它至少会随屏幕旋转更新。
       const height = viewport?.height ?? window.innerHeight;
       document.documentElement.style.setProperty('--app-height', `${height}px`);

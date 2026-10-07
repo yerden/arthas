@@ -11,10 +11,11 @@ import { useAppHeight } from '../useAppHeight';
 
 type Listener = () => void;
 
-function fakeViewport(height: number) {
+function fakeViewport(height: number, scale = 1) {
   const listeners: Record<string, Listener[]> = {};
   return {
     height,
+    scale,
     addEventListener: (type: string, fn: Listener) => {
       (listeners[type] ??= []).push(fn);
     },
@@ -100,6 +101,49 @@ describe('useAppHeight', () => {
     (window as unknown as Record<string, unknown>).visualViewport = fakeViewport(500);
     setDocumentHeight(500);
     setScrollY(0);
+
+    renderHook(() => useAppHeight());
+
+    expect(scrollTo).not.toHaveBeenCalled();
+  });
+
+  // 回归守护：双指缩放会让 visualViewport.height 变小，但布局并没有变矮。
+  // 跟着缩小外壳会把界面压成半屏，下面露出一大片空白。
+  it('ignores height changes while the user is pinch-zoomed', () => {
+    const vp = fakeViewport(800);
+    (window as unknown as Record<string, unknown>).visualViewport = vp;
+    renderHook(() => useAppHeight());
+    expect(document.documentElement.style.getPropertyValue('--app-height')).toBe('800px');
+
+    // 放大到 2 倍：可见区域减半，但布局高度不变
+    vp.scale = 2;
+    vp.height = 400;
+    vp.emit('resize');
+
+    expect(document.documentElement.style.getPropertyValue('--app-height')).toBe('800px');
+  });
+
+  it('resumes tracking once zoom returns to 1:1', () => {
+    const vp = fakeViewport(800);
+    (window as unknown as Record<string, unknown>).visualViewport = vp;
+    renderHook(() => useAppHeight());
+
+    vp.scale = 2;
+    vp.height = 400;
+    vp.emit('resize');
+
+    vp.scale = 1;
+    vp.height = 500; // 回到 1:1，键盘弹出
+    vp.emit('resize');
+
+    expect(document.documentElement.style.getPropertyValue('--app-height')).toBe('500px');
+  });
+
+  it('does not reset scroll while zoomed', () => {
+    const vp = fakeViewport(400, 2);
+    (window as unknown as Record<string, unknown>).visualViewport = vp;
+    setDocumentHeight(400);
+    setScrollY(150); // 缩放后平移页面是正常操作，不能被拽回去
 
     renderHook(() => useAppHeight());
 
