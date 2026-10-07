@@ -38,6 +38,7 @@ import {
   type SendFileCompleteData,
 } from '../network/protocol';
 import { toBase64Url } from '../crypto/utils';
+import { encodeThumbnail, serializeMetadata } from './metadataCodec';
 import { streamChunks } from './chunker';
 import { encryptChunk } from './encryptChunk';
 import { generateThumbnail } from './thumbnail';
@@ -160,6 +161,15 @@ const BUFFER_THRESHOLD = 65536; // 64KB
  */
 
 /** RTT 滑动窗口大小：保留最近 5 个 RTT 样本 */
+/**
+ * 加密前 metadata JSON 的字节上限。
+ *
+ * 服务器的 SetReadLimit 是 100KB（maxMessageSize = 102400），超出时
+ * gorilla/websocket 会关闭连接而不是丢弃该条消息。这里留出余量，给密文的
+ * 认证标签、msgpack 外层封装和 base64url 的 IV。
+ */
+const MAX_METADATA_BYTES = 80 * 1024;
+
 const RTT_WINDOW_SIZE = 5;
 
 /** 拥塞判定因子：最新 RTT > 平均 RTT × 1.5 时认为拥塞 */
@@ -787,7 +797,12 @@ async function sendEncryptedMetadata(
     fileSize: file.size,
     mimeType: file.type || 'application/octet-stream',
     totalChunks,
-    thumbnail: thumbnail ?? undefined,
+    // 📚 学习要点: 缩略图必须编码成 base64 字符串再进 JSON
+    // JSON 没有二进制类型，直接塞 Uint8Array 会被序列化成按下标建键的对象
+    // （{"0":200,"1":200,...}），体积约为原始字节的 11.8 倍。50KB 的缩略图
+    // 会膨胀到约 590KB，远超服务器 100KB 的 SetReadLimit —— gorilla 会直接
+    // 关闭连接，图片永远送不到对端。base64 只有 1.33 倍。
+    thumbnail: thumbnail ? encodeThumbnail(thumbnail) : undefined,
     ...extraFields,
   };
 
@@ -813,8 +828,16 @@ async function sendEncryptedMetadata(
   }
 
   // 2. 将元数据序列化为 JSON 字符串，然后编码为 UTF-8 字节
-  const metadataJson = JSON.stringify(metadata);
-  const metadataBytes = new TextEncoder().encode(metadataJson);
+  const { bytes: metadataBytes, thumbnailDropped } = serializeMetadata(
+    metadata,
+    MAX_METADATA_BYTES
+  );
+  if (thumbnailDropped) {
+    console.warn(
+      '[FileTransfer] Thumbnail dropped: metadata exceeded size limit',
+      transferId
+    );
+  }
 
   // 3. 生成随机 96-bit IV 并加密
   const iv = crypto.getRandomValues(new Uint8Array(12));

@@ -236,14 +236,13 @@ export async function handleFileMeta(
   // FileMessage 组件可以直接将 data URL 作为 <img> 的 src 使用，
   // 实现在完整文件传输完成前就显示图片预览。
   let thumbnailDataUrl: string | undefined;
-  if (metadata.thumbnail && metadata.thumbnail.length > 0) {
+  if (typeof metadata.thumbnail === 'string' && metadata.thumbnail.length > 0) {
     // 📚 学习要点: Uint8Array → data URL 的转换方式
     // 使用 Blob + FileReader 将二进制数据转换为 base64 data URL。
     // 这比手动 btoa() 更可靠，因为 btoa() 对大数据可能有性能问题，
     // 且 FileReader.readAsDataURL() 自动处理 MIME 类型前缀。
-    const thumbnailBytes = metadata.thumbnail instanceof Uint8Array
-      ? metadata.thumbnail
-      : new Uint8Array(Object.values(metadata.thumbnail));
+    // 缩略图以 base64url 字符串传输，见 sender.ts 的说明。
+    const thumbnailBytes = new Uint8Array(fromBase64Url(metadata.thumbnail));
     const blob = new Blob([thumbnailBytes.buffer as ArrayBuffer], { type: 'image/jpeg' });
     const reader = new FileReader();
     thumbnailDataUrl = await new Promise<string>((resolve) => {

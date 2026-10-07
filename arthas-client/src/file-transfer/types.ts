@@ -103,7 +103,14 @@ export interface FileMetadata {
   /** 分片总数 = Math.ceil(fileSize / CHUNK_SIZE)，接收方据此分配缓冲区 */
   totalChunks: number;
   /** 可选：加密前的缩略图数据 (≤50KB, JPEG)，仅图片文件包含 */
-  thumbnail?: Uint8Array;
+  /**
+   * 缩略图 JPEG，base64url 编码。
+   *
+   * metadata 最终要走 JSON.stringify，而 JSON 没有二进制类型：
+   * JSON.stringify(new Uint8Array([1,2,3])) 得到 {"0":1,"1":2,"2":3}，
+   * 体积约为原始字节的 11.8 倍。必须编码成字符串。
+   */
+  thumbnail?: string;
   /** 可选：每个 chunk 明文的 SHA-256 hash (hex)，用于未来 resume 校验 */
   chunkHashes?: string[];
 
