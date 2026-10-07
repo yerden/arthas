@@ -850,7 +850,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
                       stableId: '',
                       senderId: 'system',
                       senderName: 'System',
-                      text: `⚠️ ${senderName} 的签名密钥已变更`,
+                      text: `⚠️ ${senderName}'s signing key has changed`,
                       timestamp: Date.now(),
                       isMine: false,
                       isSystem: true,

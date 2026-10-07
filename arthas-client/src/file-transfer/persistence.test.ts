@@ -308,7 +308,7 @@ describe('persistence.ts — 文件传输状态持久化', () => {
       // 验证第一个恢复的传输
       expect(restored[0].transferId).toBe('restore-001');
       expect(restored[0].status).toBe('failed');
-      expect(restored[0].error).toBe('页面刷新，传输已中断');
+      expect(restored[0].error).toBe('Page reloaded, transfer interrupted');
       expect(restored[0].fileName).toBe('photo.png');
       expect(restored[0].fileSize).toBe(204800);
       expect(restored[0].direction).toBe('receive');
@@ -318,7 +318,7 @@ describe('persistence.ts — 文件传输状态持久化', () => {
       // 验证第二个恢复的传输
       expect(restored[1].transferId).toBe('restore-002');
       expect(restored[1].status).toBe('failed');
-      expect(restored[1].error).toBe('页面刷新，传输已中断');
+      expect(restored[1].error).toBe('Page reloaded, transfer interrupted');
       expect(restored[1].direction).toBe('send');
     });
 

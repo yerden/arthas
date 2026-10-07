@@ -17,7 +17,7 @@ interface MessageListProps {
 }
 
 const FIVE_MINUTES = 5 * 60 * 1000;
-const DECRYPT_FAIL_TEXT = '无法解密此消息';
+const DECRYPT_FAIL_TEXT = 'Unable to decrypt this message';
 
 /**
  * 📚 学习要点: 类型守卫（Type Guard）

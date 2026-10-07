@@ -221,7 +221,7 @@ export function MessageBubble({
               <button
                 key={r.emoji}
                 onClick={(e) => { e.stopPropagation(); onReact?.(r.emoji) }}
-                aria-label={`${r.emoji} ${r.userIds.length}人`}
+                aria-label={`${r.emoji} ${r.userIds.length} ${r.userIds.length === 1 ? 'person' : 'people'}`}
                 className={`px-1.5 py-0.5 rounded-full text-xs flex items-center gap-0.5 transition-colors
                   ${isMine ? 'bg-indigo-600/30 border border-indigo-500' : 'bg-gray-700/50 border border-gray-600 hover:border-gray-500'}`}
               >

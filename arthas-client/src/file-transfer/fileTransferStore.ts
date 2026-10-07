@@ -354,7 +354,7 @@ export const useFileTransferStore = create<FileTransferState & FileTransferActio
         case MSG_RELAY_FILE_META: {
           // 解密 metadata → 准备接收缓冲区 → 插入聊天占位符 → 启动超时
           if (!roomKey) {
-            console.warn('[FileTransfer] 无房间密钥，无法处理文件元数据');
+            console.warn('[FileTransfer] No room key, cannot process file metadata');
             break;
           }
           const metaData = msg.data as import('../network/protocol').RelayFileMetaData;
@@ -668,7 +668,7 @@ export const useFileTransferStore = create<FileTransferState & FileTransferActio
             newTransfers.set(id, {
               ...transfer,
               status: 'failed' as TransferStatus,
-              error: '房间已关闭，传输中断',
+              error: 'Room closed, transfer interrupted',
               chunks: [], // 释放缓冲区内存
             });
           }
@@ -828,8 +828,8 @@ function processQueue(): void {
   // --- 预检守卫 1: WebSocket 连接检查 ---
   // @see requirements.md — Requirement 2.2, 2.3
   if (!isConnected()) {
-    console.warn('[FileTransfer] WebSocket 未连接，传输失败:', nextTransferId);
-    failAndAdvance('WebSocket 连接不可用，无法发送文件');
+    console.warn('[FileTransfer] WebSocket not connected, transfer failed:', nextTransferId);
+    failAndAdvance('WebSocket unavailable, cannot send file');
     return;
   }
 
@@ -838,7 +838,7 @@ function processQueue(): void {
   // 重新从 store 读取传输状态，防御 setState 与 sendFile 调用之间的竞态条件
   const freshTransfer = useFileTransferStore.getState().transfers.get(nextTransferId);
   if (!freshTransfer || freshTransfer.status !== 'sending') {
-    console.warn('[FileTransfer] 传输状态在发送前已失效，跳过:', nextTransferId);
+    console.warn('[FileTransfer] Transfer state invalidated before send, skipping:', nextTransferId);
     useFileTransferStore.setState({ activeSendId: null });
     processQueue();
     return;
@@ -852,7 +852,7 @@ function processQueue(): void {
   const { roomKey } = useChatStore.getState();
   if (!roomKey) {
     // 没有房间密钥（可能已离开房间），标记传输失败
-    failAndAdvance('房间密钥不可用，无法加密文件');
+    failAndAdvance('Room key unavailable, cannot encrypt file');
     return;
   }
 
@@ -861,8 +861,8 @@ function processQueue(): void {
   // --- .catch() 安全网：捕获 sendFile 未处理的 Promise 拒绝 ---
   // @see requirements.md — Requirement 2.1
   sendFile(nextTransferId, roomKey).catch((error: unknown) => {
-    const errorMessage = error instanceof Error ? error.message : '未知的 sendFile 错误';
-    console.error('[FileTransfer] sendFile 未处理的 Promise 拒绝:', errorMessage);
+    const errorMessage = error instanceof Error ? error.message : 'Unknown sendFile error';
+    console.error('[FileTransfer] Unhandled promise rejection in sendFile:', errorMessage);
 
     // 幂等保护：仅当该传输仍为活跃发送时才标记失败（防止与离线超时重复处理）
     const currentState = useFileTransferStore.getState();

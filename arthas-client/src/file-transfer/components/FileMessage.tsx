@@ -310,7 +310,7 @@ export function FileMessage({ transferId }: FileMessageProps) {
           className="relative cursor-pointer group"
           onClick={isComplete && transfer.blobUrl ? handleDownload : undefined}
           role={isComplete && transfer.blobUrl ? 'button' : undefined}
-          aria-label={isComplete ? t('file.clickDownloadImage') : '图片传输中'}
+          aria-label={isComplete ? t('file.clickDownloadImage') : 'Transferring image'}
           tabIndex={isComplete && transfer.blobUrl ? 0 : undefined}
           onKeyDown={(e) => {
             if ((e.key === 'Enter' || e.key === ' ') && isComplete && transfer.blobUrl) {

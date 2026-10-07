@@ -56,7 +56,7 @@ export function ChatRoom() {
         <div className="flex items-center gap-2">
           <span className="text-lg font-semibold">{t('chat.header.room')}</span>
           <span className="text-sm text-gray-400 truncate max-w-[120px] sm:max-w-none">{roomId}</span>
-          <span className="text-green-400" title={hasPassword ? '密码保护' : '端到端加密'}>{hasPassword ? '🔐' : '🔒'}</span>
+          <span className="text-green-400" title={hasPassword ? 'Password protected' : 'End-to-end encrypted'}>{hasPassword ? '🔐' : '🔒'}</span>
           {ephemeral > 0 && <span className="text-amber-400" title={`${t('chat.header.room')} - ${ephemeral}s`}>⏱️</span>}
           <ExpiryCountdown expiresAt={expiresAt} />
         </div>

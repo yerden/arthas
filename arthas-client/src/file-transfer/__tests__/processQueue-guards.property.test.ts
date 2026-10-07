@@ -305,7 +305,7 @@ describe('Property 6: Catch handler propagates sendFile errors to transfer state
           const state = useFileTransferStore.getState();
           const updatedTransfer = state.transfers.get(transferId);
           expect(updatedTransfer!.status).toBe('failed');
-          expect(updatedTransfer!.error).toBe('未知的 sendFile 错误');
+          expect(updatedTransfer!.error).toBe('Unknown sendFile error');
 
           // Assert: activeSendId is cleared
           expect(state.activeSendId).toBeNull();

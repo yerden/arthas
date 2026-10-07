@@ -151,7 +151,7 @@ export async function handleFileMeta(
   // 发送方通过 ACK 缺失感知接收方未收到（不主动通知，避免额外消息开销）。
   if (activeReceiveCount >= MAX_CONCURRENT_RECEIVES) {
     console.warn(
-      '[FileTransfer/Receiver] 并发接收数已达上限，丢弃传输:',
+      '[FileTransfer/Receiver] Concurrent receive limit reached, dropping transfer:',
       data.transferId
     );
     return;
@@ -160,7 +160,7 @@ export async function handleFileMeta(
   // Step 1.5: 检查是否已存在相同 transferId 的传输（防止重复处理）
   if (transfers.has(data.transferId)) {
     console.warn(
-      '[FileTransfer/Receiver] 传输已存在，忽略重复 metadata:',
+      '[FileTransfer/Receiver] Transfer already exists, ignoring duplicate metadata:',
       data.transferId
     );
     return;
@@ -198,7 +198,7 @@ export async function handleFileMeta(
     metadata = JSON.parse(jsonString) as FileMetadata;
   } catch (error) {
     console.error(
-      '[FileTransfer/Receiver] 元数据解密失败:',
+      '[FileTransfer/Receiver] Metadata decryption failed:',
       data.transferId,
       error
     );
@@ -221,7 +221,7 @@ export async function handleFileMeta(
     !metadata.mimeType
   ) {
     console.warn(
-      '[FileTransfer/Receiver] 元数据字段验证失败:',
+      '[FileTransfer/Receiver] Metadata field validation failed:',
       metadata
     );
     return;
@@ -390,7 +390,7 @@ export async function handleFileChunk(
     // 📚 学习要点: 单个 chunk 解密失败 = 整个传输失败
     // AES-GCM 的认证特性意味着：如果解密失败，数据已被篡改或密钥错误。
     // 无法恢复单个 chunk，因此整个传输必须标记为失败。
-    failReceiveTransfer(data.transferId, '文件解密失败，数据可能已损坏');
+    failReceiveTransfer(data.transferId, 'File decryption failed, data may be corrupted');
     return;
   }
 
@@ -403,7 +403,7 @@ export async function handleFileChunk(
   // 如果超过 MAX_BUFFER_SIZE (5MB)，中止传输。
   const currentBufferSize = calculateBufferSize(transfer.chunks);
   if (currentBufferSize + chunkData.byteLength > MAX_BUFFER_SIZE) {
-    failReceiveTransfer(data.transferId, '接收数据超过大小限制，传输中止');
+    failReceiveTransfer(data.transferId, 'Received data exceeded size limit, transfer aborted');
     return;
   }
 
@@ -577,7 +577,7 @@ function finalizeReceive(transferId: string): void {
         // 使用 try/catch 隔离，仅打印警告日志。
         // 即使 voiceStore 出错，文件传输的状态更新和 ACK 发送已完成。
         console.warn(
-          '[FileTransfer/Receiver] onTransferComplete 回调异常:',
+          '[FileTransfer/Receiver] onTransferComplete callback threw:',
           transferId,
           error
         );
@@ -628,7 +628,7 @@ export function handleFileCancel(data: RelayFileCancelData): void {
       newTransfers.set(data.transferId, {
         ...currentTransfer,
         status: 'cancelled' as TransferStatus,
-        error: '发送方已取消传输',
+        error: 'Sender cancelled the transfer',
         chunks: [], // 释放缓冲区内存
       });
     }
@@ -690,7 +690,7 @@ export function handleSenderLeft(senderId: string): void {
         newTransfers.set(transferId, {
           ...transfer,
           status: 'failed' as TransferStatus,
-          error: '发送方已离开，传输中断',
+          error: 'Sender left, transfer interrupted',
           chunks: [], // 释放缓冲区内存
         });
         receiveCountDelta++;
@@ -846,7 +846,7 @@ function startTimeoutTimer(transferId: string): void {
 
   const timer = setTimeout(() => {
     // 超时触发：标记传输为失败
-    failReceiveTransfer(transferId, '传输超时');
+    failReceiveTransfer(transferId, 'Transfer timed out');
     timeoutTimers.delete(transferId);
   }, RECEIVE_TIMEOUT_MS);
 

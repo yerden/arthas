@@ -175,7 +175,7 @@ describe('MessageBubble — 验证状态指示器', () => {
     it('displays key change warning as system message text', () => {
       // 公钥变更警告作为系统消息显示在聊天中，
       // MessageBubble 渲染该文本内容（由 chatStore 生成）
-      const keyChangeText = '⚠️ Alice 的签名密钥已变更';
+      const keyChangeText = "⚠️ Alice's signing key has changed";
 
       render(<MessageBubble {...defaultProps({ text: keyChangeText })} />);
 

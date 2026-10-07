@@ -88,12 +88,12 @@ function formatSpeed(speedKBps: number): string {
 function formatEta(etaSeconds: number): string {
   // 无法估算（速度为 0 或刚开始传输）
   if (!isFinite(etaSeconds) || etaSeconds < 0) {
-    return '计算中...';
+    return 'Calculating...';
   }
 
   // 即将完成
   if (etaSeconds < 1) {
-    return '剩余 <1s';
+    return '<1s remaining';
   }
 
   const seconds = Math.ceil(etaSeconds);
@@ -102,10 +102,10 @@ function formatEta(etaSeconds: number): string {
   if (seconds >= 60) {
     const minutes = Math.floor(seconds / 60);
     const remainingSeconds = seconds % 60;
-    return `剩余 ${minutes}m ${remainingSeconds}s`;
+    return `${minutes}m ${remainingSeconds}s remaining`;
   }
 
-  return `剩余 ${seconds}s`;
+  return `${seconds}s remaining`;
 }
 
 // ============================================================================
@@ -207,7 +207,7 @@ export function ProgressBar({ progress, speed, eta }: ProgressBarProps) {
         aria-valuenow={clampedProgress}
         aria-valuemin={0}
         aria-valuemax={100}
-        aria-label={`文件传输进度 ${clampedProgress}%`}
+        aria-label={`File transfer progress ${clampedProgress}%`}
         className="relative w-full h-2 bg-gray-700 rounded-full overflow-hidden"
       >
         {/*

@@ -223,7 +223,7 @@ function writeToSessionStorage(): void {
     sessionStorage.setItem(STORAGE_KEY, JSON.stringify(activeTransfers));
   } catch {
     // 静默忽略写入失败（存储配额满、隐私模式等）
-    console.warn('[FileTransfer] 无法写入 sessionStorage，持久化跳过');
+    console.warn('[FileTransfer] Cannot write to sessionStorage, skipping persistence');
   }
 }
 
@@ -310,7 +310,7 @@ export function restoreTransferState(): TransferState[] {
       receivedChunks: 0,
       lastReceivedIndex: -1,
       chunks: [],           // 不恢复 chunk 缓冲区
-      error: '页面刷新，传输已中断',
+      error: 'Page reloaded, transfer interrupted',
       startTime: Date.now(),
       lastChunkTime: Date.now(),
       senderId: '',

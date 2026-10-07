@@ -391,7 +391,7 @@ export function setupOfflineDetection(): void {
       const { activeSendId } = useFileTransferStore.getState();
       if (activeSendId) {
         console.warn('[FileTransfer] Offline timeout: failing active send', activeSendId);
-        failTransfer(activeSendId, '网络离线超过 60 秒，传输超时失败', 'sending');
+        failTransfer(activeSendId, 'Offline for more than 60 seconds, transfer timed out', 'sending');
       }
       // If no active send, this is a no-op
     }, OFFLINE_TIMEOUT_MS);
@@ -563,20 +563,20 @@ export async function sendFile(transferId: string, roomKey: CryptoKey): Promise<
   // Step 1: 获取 File 引用和传输状态
   const file = fileRefs.get(transferId);
   if (!file) {
-    failTransfer(transferId, '文件引用丢失，无法发送');
+    failTransfer(transferId, 'File reference lost, cannot send');
     return;
   }
 
   const transfer = useFileTransferStore.getState().transfers.get(transferId);
   if (!transfer) {
-    failTransfer(transferId, '传输状态丢失');
+    failTransfer(transferId, 'Transfer state lost');
     return;
   }
 
   // Step 2: 二次验证文件大小（防御性编程）
   // initiateTransfer 已验证过，但 File 对象可能在排队期间被修改（极端情况）
   if (file.size <= 0 || file.size > MAX_FILE_SIZE) {
-    failTransfer(transferId, '文件大小无效');
+    failTransfer(transferId, 'Invalid file size');
     return;
   }
 
@@ -619,7 +619,7 @@ export async function sendFile(transferId: string, roomKey: CryptoKey): Promise<
 
   } catch (error) {
     // 错误处理：标记传输为 failed
-    const errorMessage = error instanceof Error ? error.message : '发送过程中发生未知错误';
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error during send';
     failTransfer(transferId, errorMessage);
   } finally {
     // 清理 File 引用（无论成功或失败）
@@ -891,7 +891,7 @@ async function sendAllChunks(
 
         // 超时检查：离线超过 60s 则放弃传输
         if (Date.now() - pauseStartTime > 60_000) {
-          throw new Error('网络断开超过 60 秒，传输失败');
+          throw new Error('Disconnected for more than 60 seconds, transfer failed');
         }
 
         // 再次检查取消状态（用户可能在离线等待期间取消传输）
@@ -903,7 +903,7 @@ async function sendAllChunks(
 
       // 网络恢复后，检查 WebSocket 是否仍然连接
       if (!isConnected()) {
-        throw new Error('连接断开，传输失败');
+        throw new Error('Connection lost, transfer failed');
       }
     }
 

@@ -388,7 +388,7 @@ describe('集成测试: 超时机制', () => {
         newTransfers.set('timeout-test-001', {
           ...t,
           status: 'failed' as TransferStatus,
-          error: '传输超时',
+          error: 'Transfer timed out',
           chunks: [], // 释放缓冲区
         });
       }
@@ -402,7 +402,7 @@ describe('集成测试: 超时机制', () => {
     const { transfers: after, activeReceiveCount } = useFileTransferStore.getState();
     const failedTransfer = after.get('timeout-test-001')!;
     expect(failedTransfer.status).toBe('failed');
-    expect(failedTransfer.error).toBe('传输超时');
+    expect(failedTransfer.error).toBe('Transfer timed out');
     expect(failedTransfer.chunks).toHaveLength(0); // 缓冲区已释放
     expect(activeReceiveCount).toBe(0);
   });
@@ -477,7 +477,7 @@ describe('集成测试: abortAllTransfers（WebSocket 断开）', () => {
 
     // sending → failed
     expect(after.get('send-001')!.status).toBe('failed');
-    expect(after.get('send-001')!.error).toBe('房间已关闭，传输中断');
+    expect(after.get('send-001')!.error).toBe('Room closed, transfer interrupted');
 
     // receiving → failed，缓冲区已释放
     expect(after.get('recv-001')!.status).toBe('failed');
@@ -567,11 +567,11 @@ describe('集成测试: handleSenderLeft（发送方离开）', () => {
 
     // sender-001 的传输应该 failed
     expect(after.get('recv-from-s1-a')!.status).toBe('failed');
-    expect(after.get('recv-from-s1-a')!.error).toBe('发送方已离开，传输中断');
+    expect(after.get('recv-from-s1-a')!.error).toBe('Sender left, transfer interrupted');
     expect(after.get('recv-from-s1-a')!.chunks).toHaveLength(0); // 缓冲区释放
 
     expect(after.get('recv-from-s1-b')!.status).toBe('failed');
-    expect(after.get('recv-from-s1-b')!.error).toBe('发送方已离开，传输中断');
+    expect(after.get('recv-from-s1-b')!.error).toBe('Sender left, transfer interrupted');
     expect(after.get('recv-from-s1-b')!.chunks).toHaveLength(0);
 
     // sender-002 的传输不受影响
@@ -733,7 +733,7 @@ describe('集成测试: 消息路由（handleFileMessage）', () => {
     const { transfers: after, activeReceiveCount } = useFileTransferStore.getState();
     const cancelledTransfer = after.get('cancel-test')!;
     expect(cancelledTransfer.status).toBe('cancelled');
-    expect(cancelledTransfer.error).toBe('发送方已取消传输');
+    expect(cancelledTransfer.error).toBe('Sender cancelled the transfer');
     expect(cancelledTransfer.chunks).toHaveLength(0); // 缓冲区释放
     expect(activeReceiveCount).toBe(0);
   });
