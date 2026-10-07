@@ -2,7 +2,7 @@ import { useEffect, useState, Component, type ReactNode } from 'react';
 import { useChatStore } from './stores/chatStore';
 import { usePageStore } from './stores/pageStore';
 import { useMatchStore } from './match/matchStore';
-import { disconnect } from './network/websocket';
+import { disconnect, onReconnect } from './network/websocket';
 import { Home } from './pages/Home';
 import { ChatRoom } from './pages/ChatRoom';
 import { Hub } from './pages/Hub';
@@ -91,8 +91,17 @@ function App() {
   }, []);
 
   useEffect(() => {
+    // 📚 学习要点: 重连后必须重新加入房间
+    // 服务器在连接断开时就把客户端移出了房间，对端会收到 MemberLeft。
+    // 重新建立 WebSocket 只恢复了传输通道，必须再发一次 JoinRoom 才会真正
+    // 回到房间 —— 否则手机切后台再回来，对端会一直认为我们已经离开。
+    onReconnect(() => {
+      useChatStore.getState().rejoinRoom();
+    });
+
     connect();
     return () => {
+      onReconnect(null);
       // React StrictMode 在开发模式下会 mount → unmount → remount。
       // disconnect() 确保旧连接被正确关闭，不会留下孤儿 WebSocket。
       // 生产环境不会触发此 cleanup（组件只 mount 一次）。

@@ -134,6 +134,13 @@ export interface ChatState {
   roomId: string | null;
   roomKey: CryptoKey | null;
   shareCode: string | null;
+  /**
+   * 加入房间时使用的密码哈希。
+   *
+   * 重连后必须重新发送 JoinRoom（服务器在断线时已把我们移出房间），
+   * 而 JoinRoom 需要密码哈希。仅保存在内存中，与 roomKey 同等级别。
+   */
+  passwordHash: string | null;
   members: Member[];
   hasPassword: boolean;
   ephemeral: number;
@@ -165,6 +172,8 @@ export interface ChatState {
   joinRoom: (shareCode: string, name: string, password?: string) => Promise<void>;
   sendMessage: (text: string) => Promise<void>;
   setTyping: (typing: boolean) => Promise<void>;
+  /** 重连后重新加入房间；不在房间内时为空操作。 */
+  rejoinRoom: () => void;
   leaveRoom: () => void;
   toggleMute: () => void;
   setReplyTo: (reply: ReplyData) => void;
@@ -270,6 +279,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
   roomId: null,
   roomKey: null,
   shareCode: null,
+  passwordHash: null,
   members: [],
   hasPassword: false,
   ephemeral: 0,
@@ -313,7 +323,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
     // 客户端以 no-sig 模式运行（消息正常加密发送，只是没有签名）。
     const keyPair = await generateSigningKeyPair();
 
-    set({ myName: name, roomKey, ephemeral: ephemeral ?? 0, signingKeyPair: keyPair, publicKeyMap: new Map() });
+    set({ myName: name, roomKey, passwordHash: hashedPwd, ephemeral: ephemeral ?? 0, signingKeyPair: keyPair, publicKeyMap: new Map() });
 
     // Build create room payload with proper type
     const payload: CreateRoomData = {
@@ -362,7 +372,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
     // Generate Ed25519 keypair for signing (null if unsupported)
     const keyPair = await generateSigningKeyPair();
 
-    set({ myName: name, roomKey, shareCode, ephemeral, signingKeyPair: keyPair, publicKeyMap: new Map() });
+    set({ myName: name, roomKey, shareCode, passwordHash: hashedPwd, ephemeral, signingKeyPair: keyPair, publicKeyMap: new Map() });
     ws.send(MSG_JOIN_ROOM, { roomId, name, password: hashedPwd });
   },
 
@@ -509,6 +519,19 @@ export const useChatStore = create<ChatState>((set, get) => ({
     }
   },
 
+  rejoinRoom: () => {
+    const { roomId, myName, passwordHash } = get();
+
+    // 不在房间里（例如停留在首页）时，重连不需要做任何事。
+    if (!roomId || !myName) return;
+
+    // 📚 学习要点: 重新加入时必须沿用原有的签名密钥对
+    // 这里刻意不重新生成 signingKeyPair。对端把公钥变化视为潜在的中间人攻击
+    // 并弹出警告，如果每次切后台回来都换一套密钥，用户会被没有意义的安全
+    // 警告淹没。RoomJoined 的处理逻辑会重新广播现有公钥。
+    ws.send(MSG_JOIN_ROOM, { roomId, name: myName, password: passwordHash ?? '' });
+  },
+
   leaveRoom: () => {
     ws.send(MSG_LEAVE_ROOM, {});
 
@@ -541,6 +564,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
       roomId: null,
       roomKey: null,
       shareCode: null,
+      passwordHash: null,
       members: [],
       hasPassword: false,
       ephemeral: 0,

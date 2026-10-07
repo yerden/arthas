@@ -35,6 +35,22 @@ const BACKOFF_MAX_MS = 30000
 let ws: WebSocket | null = null
 let connected = false
 let reconnectTimer: ReturnType<typeof setTimeout> | null = null
+
+/**
+ * 重连成功后的回调。
+ *
+ * 📚 学习要点: 传输层恢复 ≠ 回到房间
+ * 服务器在连接断开时就把客户端移出了房间（其他成员会收到 MemberLeft）。
+ * 重新建立 WebSocket 只恢复了传输通道，服务端并不知道我们还想待在原来的
+ * 房间里 —— 必须重新发送 JoinRoom。
+ *
+ * 手机切到别的 App 时 iOS Safari 会断开 WebSocket，回到前台后重连，
+ * 过去只是重连了通道，对端始终显示我们已离开。
+ */
+let reconnectHandler: (() => void) | null = null
+
+/** 标记是否已经成功连接过；之后的每次 onopen 都属于「重连」。 */
+let hasConnectedOnce = false
 let backoff = BACKOFF_INITIAL_MS
 let messageHandler: ((msg: Message) => void) | null = null
 let shouldReconnect = true
@@ -71,6 +87,13 @@ export function connect(url?: string): void {
       console.log('[WS] Connected')
       connected = true
       backoff = BACKOFF_INITIAL_MS // 重置退避
+
+      // 首次连接由调用方自己决定何时 join；此后每次 onopen 都是重连，
+      // 需要重新加入房间，否则对端会一直认为我们已经离开。
+      if (hasConnectedOnce) {
+        reconnectHandler?.()
+      }
+      hasConnectedOnce = true
     }
 
     ws.onmessage = (event: MessageEvent) => {
@@ -102,7 +125,17 @@ export function connect(url?: string): void {
 /**
  * 主动关闭连接，不再自动重连。
  */
+/**
+ * 注册重连后的回调（用于重新加入房间）。
+ * 首次连接不会触发，只有真正的重连才会。
+ */
+export function onReconnect(handler: (() => void) | null): void {
+  reconnectHandler = handler
+}
+
 export function disconnect(): void {
+  // 主动断开：下一次 connect() 视为首次连接，不应触发重新加入。
+  hasConnectedOnce = false
   shouldReconnect = false
   if (reconnectTimer) {
     clearTimeout(reconnectTimer)
