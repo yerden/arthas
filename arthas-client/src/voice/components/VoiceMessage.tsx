@@ -240,6 +240,9 @@ export function VoiceMessage({ transferId, duration, senderName, isMine }: Voice
         `}
         role="article"
         aria-label={`${senderName} ${t('voice.decryptFailed')}`}
+        // 悬停显示底层原因：同一句提示对应四种不同故障，
+        // 不暴露出来就无法区分是解密失败、超时还是分片丢失。
+        title={transferState?.error ?? undefined}
       >
         <span className="text-lg flex-shrink-0" aria-hidden="true">⚠️</span>
         <p className="text-sm text-red-400">

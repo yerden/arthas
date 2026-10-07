@@ -232,6 +232,15 @@ export interface TransferState {
   error?: string;
   /** 传输开始时间戳（Date.now()），用于计算传输速度 */
   startTime: number;
+  /**
+   * 发送方已发出 COMPLETE，但当时仍有 chunk 在异步处理中。
+   *
+   * chunk 的处理是异步的（解密），COMPLETE 可能先于最后一个 chunk 处理完成
+   * 到达。此标记让最后一个 chunk 落盘时知道「可以收尾了」，避免把正常的
+   * 时序竞争误判为文件不完整。
+   */
+  completionSignaled?: boolean;
+
   /** 最后一个分片的时间戳，用于超时检测 */
   lastChunkTime: number;
   /** 发送方的用户 ID */

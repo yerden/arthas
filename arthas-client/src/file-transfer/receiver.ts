@@ -47,6 +47,7 @@ import { decryptChunk } from './decryptChunk';
 import { reassembleChunks } from './chunker';
 import { sanitizeFileName } from './sanitize';
 import { useFileTransferStore, MAX_CONCURRENT_RECEIVES } from './fileTransferStore';
+import { bufferEarlyChunk, takeEarlyChunks } from './pendingChunks';
 import { generateChatMessageId } from './chatMessageId';
 import { useChatStore } from '../stores/chatStore';
 import {
@@ -72,6 +73,17 @@ import {
  * @see requirements.md — Requirement 11.5
  */
 const RECEIVE_TIMEOUT_MS = 60_000;
+
+/**
+ * metadata 注册完成后，按到达顺序回放在解密窗口期早到的 chunk。
+ * @see pendingChunks.ts — 为什么会有早到的 chunk，以及暂存的上限
+ */
+async function drainEarlyChunks(transferId: string, roomKey: CryptoKey): Promise<void> {
+  for (const chunk of takeEarlyChunks(transferId)) {
+    await handleFileChunk(chunk, roomKey);
+  }
+}
+
 
 /**
  * 接收缓冲区大小上限：5MB (5,242,880 bytes)。
@@ -290,6 +302,9 @@ export async function handleFileMeta(
 
   // Step 7: 启动 60s 超时定时器
   startTimeoutTimer(data.transferId);
+
+  // Step 8: 回放在 metadata 解密期间早到的 chunk
+  await drainEarlyChunks(data.transferId, roomKey);
 }
 
 /**
@@ -332,7 +347,10 @@ export async function handleFileChunk(
   // - 网络延迟导致 chunk 在 metadata 之前到达（极端情况）
   const transfer = transfers.get(data.transferId);
   if (!transfer) {
-    return; // 静默丢弃，不打印日志（高频消息避免日志洪泛）
+    // 可能是 metadata 还在解密（见 bufferEarlyChunk），先暂存等待回放；
+    // 若该传输确实不存在，暂存会在 TTL 到期后被清理。
+    bufferEarlyChunk(data);
+    return;
   }
 
   // 只处理 'receiving' 状态的传输（其他状态的 chunk 直接丢弃）
@@ -417,6 +435,18 @@ export async function handleFileChunk(
   // 只要数据持续到达，传输就不会超时。
   // 超时只在"完全没有新数据"时触发（网络断开或发送方崩溃）。
   resetTimeoutTimer(data.transferId);
+
+  // Step 9: 若 COMPLETE 已先行到达，此刻补齐最后一个 chunk，由这里收尾
+  // 见 handleFileComplete：COMPLETE 与 chunk 解密在事件循环中竞争，
+  // 谁最后到达谁负责收尾。
+  const updated = useFileTransferStore.getState().transfers.get(data.transferId);
+  if (
+    updated?.completionSignaled === true &&
+    updated.status === 'receiving' &&
+    updated.receivedChunks === updated.totalChunks
+  ) {
+    finalizeReceive(data.transferId);
+  }
 }
 
 /**
@@ -451,15 +481,43 @@ export function handleFileComplete(data: RelayFileCompleteData): void {
     return;
   }
 
-  // 验证所有 chunk 已收齐
+  // 📚 学习要点: COMPLETE 早于 chunk 处理完成是正常现象，不是数据丢失
+  // chunk 的处理链路是异步的（await decryptChunk → crypto.subtle.decrypt），
+  // 而 COMPLETE 紧跟在最后一个 chunk 之后到达。两者在事件循环里竞争，
+  // COMPLETE 往往先跑完 —— 对只有一个 chunk 的语音消息几乎必然如此。
+  //
+  // 过去这里直接判定「文件不完整」，把一个正常的时序当成了丢包，表现为
+  // 「已收到 0/1 个分片」。正确做法是记下「发送方已声明发完」，等最后一个
+  // chunk 落盘后再收尾；真正缺失的 chunk 由 60s 超时兜底。
   if (transfer.receivedChunks !== transfer.totalChunks) {
-    // 📚 学习要点: chunk 不完整的处理
-    // 可能原因：某些 chunk 在服务器端被丢弃（SendFileData 超时）
-    // 此时传输无法完成，标记为失败
-    failReceiveTransfer(
-      data.transferId,
-      `文件不完整：已收到 ${transfer.receivedChunks}/${transfer.totalChunks} 个分片`
-    );
+    markCompletionSignaled(data.transferId);
+    return;
+  }
+
+  finalizeReceive(data.transferId);
+}
+
+/** 记录发送方已发出 COMPLETE，但仍有 chunk 在异步处理中。 */
+function markCompletionSignaled(transferId: string): void {
+  useFileTransferStore.setState((state) => {
+    const newTransfers = new Map(state.transfers);
+    const transfer = newTransfers.get(transferId);
+    if (transfer && transfer.status === 'receiving') {
+      newTransfers.set(transferId, { ...transfer, completionSignaled: true });
+    }
+    return { transfers: newTransfers };
+  });
+}
+
+/**
+ * 收尾：重组文件、回 ACK、更新状态为 complete、触发语音回调。
+ *
+ * 两个调用点：COMPLETE 到达且 chunk 已齐，或最后一个 chunk 落盘时发现
+ * COMPLETE 已经先到过。
+ */
+function finalizeReceive(transferId: string): void {
+  const transfer = useFileTransferStore.getState().transfers.get(transferId);
+  if (!transfer || transfer.status !== 'receiving') {
     return;
   }
 
@@ -468,15 +526,15 @@ export function handleFileComplete(data: RelayFileCompleteData): void {
   const blobUrl = URL.createObjectURL(blob);
 
   // 发送 ACK 确认
-  const ackData: SendFileAckData = { transferId: data.transferId };
+  const ackData: SendFileAckData = { transferId: transferId };
   send(MSG_SEND_FILE_ACK, ackData);
 
   // 更新状态为 complete，释放 chunk 缓冲区
   useFileTransferStore.setState((state) => {
     const newTransfers = new Map(state.transfers);
-    const currentTransfer = newTransfers.get(data.transferId);
+    const currentTransfer = newTransfers.get(transferId);
     if (currentTransfer) {
-      newTransfers.set(data.transferId, {
+      newTransfers.set(transferId, {
         ...currentTransfer,
         status: 'complete' as TransferStatus,
         blobUrl,
@@ -512,7 +570,7 @@ export function handleFileComplete(data: RelayFileCompleteData): void {
         duration: transfer.duration,
       };
       try {
-        onTransferComplete(data.transferId, blobUrl, reconstructedMetadata);
+        onTransferComplete(transferId, blobUrl, reconstructedMetadata);
       } catch (error) {
         // 📚 学习要点: 回调异常隔离
         // 回调中的异常不应影响文件传输核心流程。
@@ -520,7 +578,7 @@ export function handleFileComplete(data: RelayFileCompleteData): void {
         // 即使 voiceStore 出错，文件传输的状态更新和 ACK 发送已完成。
         console.warn(
           '[FileTransfer/Receiver] onTransferComplete 回调异常:',
-          data.transferId,
+          transferId,
           error
         );
       }
@@ -528,7 +586,7 @@ export function handleFileComplete(data: RelayFileCompleteData): void {
   }
 
   // 清除超时定时器
-  clearTimeoutTimer(data.transferId);
+  clearTimeoutTimer(transferId);
 }
 
 /**
@@ -838,6 +896,12 @@ function clearTimeoutTimer(transferId: string): void {
  * @param error - 错误描述信息
  */
 function failReceiveTransfer(transferId: string, error: string): void {
+  // 📚 学习要点: 失败原因必须可见
+  // 本函数有四个调用点（解密失败、超限、分片不全、超时），但 UI 把它们
+  // 统一显示成一句「解密失败」。原因只写进 transfer.error，不打日志的话，
+  // 线上排查时四种完全不同的故障看起来一模一样。
+  console.error('[FileTransfer/Receiver] transfer failed:', transferId, error);
+
   useFileTransferStore.setState((state) => {
     const newTransfers = new Map(state.transfers);
     const transfer = newTransfers.get(transferId);
