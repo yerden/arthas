@@ -9,7 +9,12 @@
 body {
   margin: 0;
   padding: 0;
-  overflow: hidden;
+  /* Only clip horizontally. A blanket `overflow: hidden` here breaks every
+     document-flow page (Home, Hub, Match, error boundary) -- they use
+     `min-h-screen` and grow past a short mobile viewport, and the overflow
+     became unreachable by touch. ChatRoom does not rely on this rule: it is a
+     fixed-height shell (h-screen/100dvh) with its own inner scroll container. */
+  overflow-x: hidden;
   background: #0d0d1a;
   font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
 }
