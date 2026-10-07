@@ -26,17 +26,18 @@ export function useAppHeight(): void {
     const viewport = window.visualViewport;
 
     const apply = (): void => {
-      // 📚 学习要点: 双指缩放同样会改变 visualViewport.height
-      // visualViewport 描述的是「当前看得见的区域」，不是布局高度。用户放大
-      // 到 2 倍时，可见区域只剩一半，height 也随之减半 —— 但布局并没有变矮。
-      // 如果这时跟着缩小外壳，界面会被压成半屏，下面露出一大片空白，正是
-      // 「界面错乱」的成因。缩放期间不碰布局，等回到 1:1 再同步。
-      if (viewport && Math.abs(viewport.scale - 1) > 0.01) {
-        return;
-      }
+      // 📚 学习要点: 缩放也会改变 visualViewport.height，要换算回布局高度
+      // visualViewport 描述的是「当前看得见的区域」，不是布局高度：放大到 2 倍
+      // 时可见区域只剩一半，height 也随之减半，但布局并没有变矮。乘回 scale
+      // 即可还原布局高度 —— 缩放时结果不变，键盘弹出时（scale 为 1）如实缩小。
+      //
+      // 这里刻意不采用「缩放时直接跳过更新」的写法：只要 scale 有一次不等于
+      // 1，高度就会被永久卡在旧值上，表现正是「键盘收起了但界面没有恢复」。
+      // 换算的做法没有这种失效状态。
+      const scale = viewport?.scale ?? 1;
 
       // visualViewport 不可用时退回 innerHeight —— 它至少会随屏幕旋转更新。
-      const height = viewport?.height ?? window.innerHeight;
+      const height = viewport ? viewport.height * scale : window.innerHeight;
       document.documentElement.style.setProperty('--app-height', `${height}px`);
 
       // 键盘收起后浏览器可能把页面留在上推后的偏移上，固定高度的外壳不会
@@ -50,11 +51,23 @@ export function useAppHeight(): void {
       //
       // 判据：文档整体高度没有超过可视视口，说明没有可滚动的内容，此时任何
       // 非零的 scrollY 都是浏览器推移留下的残留，纠正它是安全的。
+      // 缩放状态下的平移是用户的主动操作，不能纠正。
+      const zoomed = Math.abs(scale - 1) > 0.01;
       const pageFitsViewport =
         document.documentElement.scrollHeight <= Math.ceil(height) + 1;
-      if (pageFitsViewport && window.scrollY !== 0) {
+      if (!zoomed && pageFitsViewport && window.scrollY !== 0) {
         window.scrollTo(0, 0);
       }
+    };
+
+    // 📚 学习要点: iOS 不保证在键盘收起后补发最后一次 resize
+    // 少了那一次事件，--app-height 就会停在键盘压缩后的高度上，界面卡在
+    // 上半屏。输入框失焦后延迟再同步一次作为兜底 —— 多跑一次没有副作用，
+    // 漏掉一次则整个界面都不会恢复。
+    let settleTimer: ReturnType<typeof setTimeout> | null = null;
+    const applyAfterSettle = (): void => {
+      if (settleTimer !== null) clearTimeout(settleTimer);
+      settleTimer = setTimeout(apply, 300);
     };
 
     apply();
@@ -64,11 +77,16 @@ export function useAppHeight(): void {
     viewport?.addEventListener('resize', apply);
     viewport?.addEventListener('scroll', apply);
     window.addEventListener('orientationchange', apply);
+    window.addEventListener('resize', apply);
+    window.addEventListener('focusout', applyAfterSettle);
 
     return () => {
+      if (settleTimer !== null) clearTimeout(settleTimer);
       viewport?.removeEventListener('resize', apply);
       viewport?.removeEventListener('scroll', apply);
       window.removeEventListener('orientationchange', apply);
+      window.removeEventListener('resize', apply);
+      window.removeEventListener('focusout', applyAfterSettle);
     };
   }, []);
 }

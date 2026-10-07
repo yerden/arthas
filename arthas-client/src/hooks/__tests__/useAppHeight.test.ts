@@ -107,36 +107,50 @@ describe('useAppHeight', () => {
     expect(scrollTo).not.toHaveBeenCalled();
   });
 
-  // 回归守护：双指缩放会让 visualViewport.height 变小，但布局并没有变矮。
-  // 跟着缩小外壳会把界面压成半屏，下面露出一大片空白。
-  it('ignores height changes while the user is pinch-zoomed', () => {
+  // 缩放会让 visualViewport.height 变小，但布局并没有变矮：乘回 scale 还原。
+  // 注意这里不能用「缩放时跳过更新」—— 那样只要 scale 有一次不等于 1，
+  // 高度就会被永久卡住，表现就是键盘收起后界面不恢复。
+  it('compensates for zoom so the layout height is unchanged', () => {
     const vp = fakeViewport(800);
     (window as unknown as Record<string, unknown>).visualViewport = vp;
     renderHook(() => useAppHeight());
-    expect(document.documentElement.style.getPropertyValue('--app-height')).toBe('800px');
 
-    // 放大到 2 倍：可见区域减半，但布局高度不变
     vp.scale = 2;
-    vp.height = 400;
+    vp.height = 400; // 可见区域减半
     vp.emit('resize');
 
     expect(document.documentElement.style.getPropertyValue('--app-height')).toBe('800px');
   });
 
-  it('resumes tracking once zoom returns to 1:1', () => {
-    const vp = fakeViewport(800);
+  it('still tracks the keyboard while zoomed', () => {
+    const vp = fakeViewport(800, 2);
     (window as unknown as Record<string, unknown>).visualViewport = vp;
     renderHook(() => useAppHeight());
 
-    vp.scale = 2;
-    vp.height = 400;
+    // 缩放保持 2x，键盘弹出又砍掉一半可见高度
+    vp.height = 200;
     vp.emit('resize');
 
-    vp.scale = 1;
-    vp.height = 500; // 回到 1:1，键盘弹出
-    vp.emit('resize');
+    expect(document.documentElement.style.getPropertyValue('--app-height')).toBe('400px');
+  });
 
-    expect(document.documentElement.style.getPropertyValue('--app-height')).toBe('500px');
+  // 回归守护：键盘收起后 iOS 不保证补发 resize，失焦兜底必须把高度同步回去。
+  it('re-syncs after focusout when no resize follows the keyboard', async () => {
+    vi.useFakeTimers();
+    try {
+      const vp = fakeViewport(400); // 键盘压缩后的高度
+      (window as unknown as Record<string, unknown>).visualViewport = vp;
+      renderHook(() => useAppHeight());
+      expect(document.documentElement.style.getPropertyValue('--app-height')).toBe('400px');
+
+      vp.height = 800; // 键盘收起，但 iOS 没有补发 resize
+      window.dispatchEvent(new Event('focusout'));
+      vi.advanceTimersByTime(400);
+
+      expect(document.documentElement.style.getPropertyValue('--app-height')).toBe('800px');
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('does not reset scroll while zoomed', () => {
