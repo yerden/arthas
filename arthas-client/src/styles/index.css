@@ -6,17 +6,6 @@
   box-sizing: border-box;
 }
 
-:root {
-  /* 默认值；useAppHeight 会用可视视口的实际高度覆盖它。 */
-  --app-height: 100vh;
-}
-
-@supports (height: 100dvh) {
-  :root {
-    --app-height: 100dvh;
-  }
-}
-
 body {
   margin: 0;
   padding: 0;
