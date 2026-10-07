@@ -141,6 +141,8 @@
   "voice.expired": "音声の有効期限切れ",
   "voice.receiving": "受信中...",
   "voice.decryptFailed": "音声の復号に失敗しました",
+  "voice.unsupported": "このブラウザはこの音声形式を再生できません",
+  "voice.download": "代わりにダウンロード",
   "voice.holdToRecord": "長押しで録音",
 
   "language.switch": "言語を切り替え",

@@ -141,6 +141,8 @@
   "voice.expired": "语音已过期",
   "voice.receiving": "接收中...",
   "voice.decryptFailed": "语音解密失败",
+  "voice.unsupported": "当前浏览器无法播放此音频格式",
+  "voice.download": "改为下载",
   "voice.holdToRecord": "按住录音",
 
   "language.switch": "切换语言",

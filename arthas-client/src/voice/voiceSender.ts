@@ -107,7 +107,11 @@ function generateVoiceFileName(mimeType: string): string {
   const seconds = String(now.getSeconds()).padStart(2, '0');
 
   // 根据 mimeType 确定文件扩展名
-  const ext = mimeType.includes('mp4') ? 'mp4' : 'webm';
+  const ext = mimeType.includes('ogg')
+    ? 'ogg'
+    : mimeType.includes('mp4')
+      ? 'mp4'
+      : 'webm';
 
   return `voice_${year}${month}${day}_${hours}${minutes}${seconds}.${ext}`;
 }

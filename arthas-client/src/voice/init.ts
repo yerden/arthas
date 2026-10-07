@@ -28,6 +28,48 @@
 
 import { useFileTransferStore } from '../file-transfer/fileTransferStore';
 import { useVoiceStore } from './voiceStore';
+import { canPlayVoiceMime } from './canPlay';
+import { isOggOpus, transcodeOggOpusToWav } from './transcode';
+
+/**
+ * 注册语音 Blob，必要时先转码成浏览器能播放的格式。
+ *
+ * 📚 学习要点: 为什么在接收时转码，而不是播放时？
+ * voiceStore.playVoice 是同步的，播放时转码会把它变成异步，连带影响
+ * player 的单例播放逻辑和 UI 状态机。接收时转码虽然会处理掉用户可能
+ * 永远不播放的消息，但保持了调用链的同步契约，改动面小得多。
+ *
+ * 失败时一律退回原始 blobUrl —— 此时 VoiceMessage 会显示「无法播放 +
+ * 下载」，而不是让消息凭空消失。
+ */
+async function registerPlayableVoice(
+  transferId: string,
+  blobUrl: string,
+  mimeType: string | undefined
+): Promise<void> {
+  const store = useVoiceStore.getState();
+
+  // 能原生播放，或不是我们能解码的格式 —— 直接注册原始 Blob
+  if (canPlayVoiceMime(mimeType) || !isOggOpus(mimeType)) {
+    store.registerVoiceBlob(transferId, blobUrl);
+    return;
+  }
+
+  try {
+    const original = await (await fetch(blobUrl)).blob();
+    const wav = await transcodeOggOpusToWav(original);
+    if (wav) {
+      // voiceStore 负责在 LRU 淘汰时 revoke 它拿到的这个 URL。
+      // 原始 blobUrl 由 fileTransferStore 持有，这里不越权回收。
+      store.registerVoiceBlob(transferId, URL.createObjectURL(wav));
+      return;
+    }
+  } catch (error) {
+    console.warn('[VoiceInit] transcode failed, using original blob:', error);
+  }
+
+  store.registerVoiceBlob(transferId, blobUrl);
+}
 
 // ============================================================================
 // 初始化函数
@@ -62,7 +104,7 @@ export function initVoice(): void {
     fileTransferStore.getState().registerTransferCompleteCallback(
       (transferId: string, blobUrl: string, metadata) => {
         if (metadata.isVoice) {
-          useVoiceStore.getState().registerVoiceBlob(transferId, blobUrl);
+          void registerPlayableVoice(transferId, blobUrl, metadata.mimeType);
         }
       }
     );

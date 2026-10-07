@@ -39,6 +39,12 @@
 import type { RecordingState, RecordingResult } from './types';
 import { translate } from '../i18n';
 import { useI18nStore } from '../i18n';
+import {
+  createOpusEncoder,
+  isOpusEncodingSupported,
+  OPUS_MIME,
+  type OpusEncoderHandle,
+} from './opusEncoder';
 
 // ============================================================================
 // 常量
@@ -193,6 +199,9 @@ export function createVoiceRecorder(): VoiceRecorder {
    */
   let _stopResolve: ((result: RecordingResult | null) => void) | null = null;
 
+  /** WASM Opus 编码器；null 表示走原生 MediaRecorder 回退路径。 */
+  let _opus: OpusEncoderHandle | null = null;
+
   // === 内部方法 ===
 
   /** 清理所有内部状态和资源 */
@@ -201,12 +210,88 @@ export function createVoiceRecorder(): VoiceRecorder {
       clearTimeout(_maxDurationTimer);
       _maxDurationTimer = null;
     }
+    if (_opus) {
+      _opus.dispose();
+      _opus = null;
+    }
     releaseStream(_stream);
     _stream = null;
     _recorder = null;
     _chunks = [];
     _startTime = 0;
     _stopResolve = null;
+  }
+
+  /**
+   * 监听麦克风断开（物理拔出或被系统收回），自动丢弃当前录音。
+   * Opus 与 MediaRecorder 两条路径共用。
+   */
+  function attachMicDisconnectHandler(): void {
+    const audioTrack = _stream?.getAudioTracks()[0];
+    if (!audioTrack) return;
+    audioTrack.onended = () => {
+      if (_state === 'recording') {
+        cleanup();
+        _state = 'idle';
+        if (_stopResolve) {
+          _stopResolve(null);
+          _stopResolve = null;
+        }
+      }
+    };
+  }
+
+  /**
+   * 到达最大时长后自动停止并发送（而非丢弃）。
+   * Opus 与 MediaRecorder 两条路径共用。
+   */
+  function startMaxDurationTimer(): void {
+    _maxDurationTimer = setTimeout(() => {
+      _maxDurationTimer = null;
+      if (_state === 'recording') {
+        performStop();
+      }
+    }, MAX_DURATION_MS);
+  }
+
+  /**
+   * Opus 路径的停止逻辑。
+   *
+   * 与 MediaRecorder 路径保持一致的契约：时长不足 MIN_DURATION_MS 返回 null，
+   * 否则返回至少 1 秒的 RecordingResult。编码失败同样返回 null，调用方
+   * （voiceStore）据此走「录音失败」提示，而不是发出一条空消息。
+   */
+  async function performOpusStop(): Promise<RecordingResult | null> {
+    const encoder = _opus;
+    if (_state !== 'recording' || !encoder || !_stream) {
+      return null;
+    }
+
+    _state = 'processing';
+    if (_maxDurationTimer !== null) {
+      clearTimeout(_maxDurationTimer);
+      _maxDurationTimer = null;
+    }
+
+    const durationMs = Date.now() - _startTime;
+    try {
+      const blob = await encoder.stop();
+      if (durationMs < MIN_DURATION_MS) {
+        return null;
+      }
+      return {
+        blob,
+        duration: Math.max(Math.round(durationMs / 1000), 1),
+        mimeType: OPUS_MIME,
+      };
+    } catch {
+      return null;
+    } finally {
+      // 先置空再 cleanup：编码器已经停止，避免 cleanup() 重复 dispose。
+      _opus = null;
+      cleanup();
+      _state = 'idle';
+    }
   }
 
   /**
@@ -222,6 +307,9 @@ export function createVoiceRecorder(): VoiceRecorder {
    * 调用方 await stop() 后才能安全使用 RecordingResult。
    */
   function performStop(): Promise<RecordingResult | null> {
+    if (_opus) {
+      return performOpusStop();
+    }
     return new Promise<RecordingResult | null>((resolve) => {
       if (_state !== 'recording' || !_recorder || !_stream) {
         // 非录音状态，直接返回 null
@@ -294,6 +382,33 @@ export function createVoiceRecorder(): VoiceRecorder {
         _state = 'idle';
         cleanup();
         throw new Error(t('voice.error.micDenied'));
+      }
+
+      // ─── 优先走 WASM Opus 编码 ──────────────────────────────────────────
+      // 📚 学习要点: 为什么统一编码而不是各平台各自为政
+      // MediaRecorder 的输出格式由浏览器决定，互不兼容：Chrome/Android 产出
+      // WebM/Opus（iOS Safari 无法解码），iOS Safari 产出 MP4/AAC（缺少 AAC
+      // 解码器的浏览器无法播放）。统一成 Ogg/Opus 后，接收端只需一种解码器。
+      //
+      // 任何一步失败都静默回退到下面的 MediaRecorder 路径，也就是本次改动
+      // 之前的行为 —— 新增的编码器绝不能让「录不了音」成为可能。
+      if (isOpusEncodingSupported()) {
+        try {
+          const encoder = createOpusEncoder(_stream);
+          await encoder.start();
+          _opus = encoder;
+          _chunks = [];
+          _startTime = Date.now();
+          attachMicDisconnectHandler();
+          _state = 'recording';
+          startMaxDurationTimer();
+          return;
+        } catch {
+          if (_opus) {
+            _opus.dispose();
+            _opus = null;
+          }
+        }
       }
 
       try {
@@ -388,20 +503,7 @@ export function createVoiceRecorder(): VoiceRecorder {
          * 当麦克风被物理断开或被系统收回时，track 会触发 'ended' 事件。
          * 我们监听此事件来检测"麦克风断开"场景，自动停止录音。
          */
-        const audioTrack = _stream.getAudioTracks()[0];
-        if (audioTrack) {
-          audioTrack.onended = () => {
-            // 麦克风断开 — 停止录音，丢弃数据
-            if (_state === 'recording') {
-              cleanup();
-              _state = 'idle';
-              if (_stopResolve) {
-                _stopResolve(null);
-                _stopResolve = null;
-              }
-            }
-          };
-        }
+        attachMicDisconnectHandler();
 
         // 启动录制
         _recorder.start();
@@ -417,12 +519,7 @@ export function createVoiceRecorder(): VoiceRecorder {
          *
          * 注意：如果用户在 60 秒内手动松开 PTT，performStop() 会清除此定时器。
          */
-        _maxDurationTimer = setTimeout(() => {
-          _maxDurationTimer = null;
-          if (_state === 'recording') {
-            performStop();
-          }
-        }, MAX_DURATION_MS);
+        startMaxDurationTimer();
       } catch (err: unknown) {
         // 📚 学习要点: try/finally 模式的变体 — 为什么这里用 try/catch 而非 try/finally？
         // MediaStream 在录音期间必须保持活跃（MediaRecorder 正在使用它）。

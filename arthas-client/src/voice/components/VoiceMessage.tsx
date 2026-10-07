@@ -42,6 +42,7 @@ import { useVoiceStore } from '../voiceStore';
 import { useFileTransferStore } from '../../file-transfer/fileTransferStore';
 import { formatDuration } from '../formatDuration';
 import { useTranslation } from '../../i18n';
+import { canPlayVoiceMime, voiceFileExtension } from '../canPlay';
 
 // ============================================================================
 // Props 接口
@@ -127,6 +128,9 @@ export function VoiceMessage({ transferId, duration, senderName, isMine }: Voice
     (state) => state.blobCache.has(transferId)
   );
 
+  // Blob URL —— 浏览器无法解码时用于提供下载入口
+  const blobUrl = useVoiceStore((state) => state.blobCache.get(transferId));
+
   // 获取播放和暂停 actions
   const playVoice = useVoiceStore((state) => state.playVoice);
   const pauseVoice = useVoiceStore((state) => state.pauseVoice);
@@ -145,6 +149,15 @@ export function VoiceMessage({ transferId, duration, senderName, isMine }: Voice
 
   // 判断是否过期：传输已完成但 Blob 不在缓存中
   const isExpired = isTransferComplete && !hasBlobCached && !isFailed;
+
+  // 📚 学习要点: 格式不兼容是一种独立的失败状态
+  // 录制格式由发送端浏览器决定，解码能力由接收端决定，两者可能不匹配
+  // （如 Android 录制的 WebM/Opus 在 iOS Safari 上无法解码）。
+  // 数据完整、解密成功、Blob 也在缓存里，但就是放不出声音。
+  // 如果不单独处理，用户点击播放后没有任何反应，看起来像是应用坏了。
+  const mimeType = transferState?.mimeType;
+  const isUnsupported =
+    isTransferComplete && hasBlobCached && !isFailed && !canPlayVoiceMime(mimeType);
 
   // 当前播放状态（默认 idle）
   const currentPlaybackState = playbackState?.state ?? 'idle';
@@ -254,6 +267,34 @@ export function VoiceMessage({ transferId, duration, senderName, isMine }: Voice
         <p className="text-sm text-gray-500 italic">
           {t('voice.expired')}
         </p>
+      </div>
+    );
+  }
+
+  // ─── 渲染：格式不支持状态 ─────────────────────────────────────────
+  // 音频本身完好无损，只是当前浏览器缺少对应的解码器。提供下载入口，
+  // 让用户用系统播放器打开（文件名带正确扩展名）。
+  if (isUnsupported) {
+    return (
+      <div
+        className="flex items-center gap-2 px-3 py-2.5 rounded-xl bg-amber-900/20 border border-amber-800/40"
+        role="article"
+        aria-label={`${senderName} ${t('voice.unsupported')}`}
+      >
+        <span className="text-lg flex-shrink-0" aria-hidden="true">🔇</span>
+
+        <div className="flex-1 min-w-0">
+          <p className="text-sm text-amber-300">{t('voice.unsupported')}</p>
+          {blobUrl && (
+            <a
+              href={blobUrl}
+              download={`voice-${transferId}.${voiceFileExtension(mimeType)}`}
+              className="text-xs text-amber-400 underline hover:text-amber-200 transition-colors"
+            >
+              {t('voice.download')}
+            </a>
+          )}
+        </div>
       </div>
     );
   }
