@@ -9,6 +9,7 @@ import { useVoiceStore } from '../voice/voiceStore';
 import { truncatePreview } from '../utils/payload';
 import type { ChatFileMessage } from '../network/protocol';
 import { isVoiceMessage } from '../network/protocol';
+import { useTranslation } from '../i18n';
 
 interface MessageListProps {
   messages: (ChatMessage | ChatFileMessage)[];
@@ -61,6 +62,7 @@ export function MessageList({ messages, myId, members }: MessageListProps) {
   const setReplyTo = useChatStore((s) => s.setReplyTo);
   const sendReaction = useChatStore((s) => s.sendReaction);
   const ephemeral = useChatStore((s) => s.ephemeral);
+  const { t } = useTranslation();
 
   // Auto-scroll to bottom on new messages
   useEffect(() => {
@@ -101,7 +103,7 @@ export function MessageList({ messages, myId, members }: MessageListProps) {
         ref={scrollRef}
         className="flex-1 overflow-y-auto p-4 flex items-center justify-center"
       >
-        <span className="text-gray-500">暂无消息，开始聊天吧</span>
+        <span className="text-gray-500">{t('chat.empty')}</span>
       </div>
     );
   }

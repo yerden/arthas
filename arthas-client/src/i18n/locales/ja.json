@@ -33,6 +33,7 @@
   "chat.input.placeholder": "メッセージを入力...",
   "chat.input.replyPlaceholder": "返信を入力...",
   "chat.input.send": "送信",
+  "chat.empty": "メッセージはまだありません。チャットを始めましょう！",
 
   "connection.reconnecting": "接続が切断されました。再接続中...",
   "connection.reconnected": "✓ 再接続しました",

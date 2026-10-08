@@ -33,6 +33,7 @@
   "chat.input.placeholder": "Type a message...",
   "chat.input.replyPlaceholder": "Type a reply...",
   "chat.input.send": "Send",
+  "chat.empty": "No messages yet. Start chatting!",
 
   "connection.reconnecting": "Connection lost, reconnecting...",
   "connection.reconnected": "✓ Reconnected",
